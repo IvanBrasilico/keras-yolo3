@@ -7,16 +7,17 @@ import colorsys
 import os
 from timeit import default_timer as timer
 
+
 import numpy as np
-from keras import backend as K
-from keras.models import load_model
-from keras.layers import Input
+from tensorflow.keras import backend as K
+from tensorflow.keras.models import load_model
+from tensorflow.keras.layers import Input
 from PIL import Image, ImageFont, ImageDraw
 
-from yolo3.model import yolo_eval, yolo_body, tiny_yolo_body
+from yolo3.model_tf2 import yolo_eval, yolo_body, tiny_yolo_body
 from yolo3.utils import letterbox_image
 import os
-from keras.utils import multi_gpu_model
+from tensorflow.keras.utils import multi_gpu_model
 
 class YOLO(object):
     _defaults = {
@@ -100,20 +101,23 @@ class YOLO(object):
                 score_threshold=self.score, iou_threshold=self.iou)
         return boxes, scores, classes
 
+    def detect_image(self, image):
+        start = timer()
 
-    def predict_image(self, image):
         if self.model_image_size != (None, None):
-            assert self.model_image_size[0] % 32 == 0, 'Multiples of 32 required'
-            assert self.model_image_size[1] % 32 == 0, 'Multiples of 32 required'
+            assert self.model_image_size[0]%32 == 0, 'Multiples of 32 required'
+            assert self.model_image_size[1]%32 == 0, 'Multiples of 32 required'
             boxed_image = letterbox_image(image, tuple(reversed(self.model_image_size)))
         else:
             new_image_size = (image.width - (image.width % 32),
                               image.height - (image.height % 32))
             boxed_image = letterbox_image(image, new_image_size)
         image_data = np.array(boxed_image, dtype='float32')
+
         print(image_data.shape)
         image_data /= 255.
         image_data = np.expand_dims(image_data, 0)  # Add batch dimension.
+
         out_boxes, out_scores, out_classes = self.sess.run(
             [self.boxes, self.scores, self.classes],
             feed_dict={
@@ -121,13 +125,8 @@ class YOLO(object):
                 self.input_image_shape: [image.size[1], image.size[0]],
                 K.learning_phase(): 0
             })
+
         print('Found {} boxes for {}'.format(len(out_boxes), 'img'))
-        return out_boxes, out_scores, out_classes
-
-
-    def detect_image(self, image):
-        start = timer()
-        out_boxes, out_scores, out_classes = self.predict_image(image)
 
         font = ImageFont.truetype(font='font/FiraMono-Medium.otf',
                     size=np.floor(3e-2 * image.size[1] + 0.5).astype('int32'))
